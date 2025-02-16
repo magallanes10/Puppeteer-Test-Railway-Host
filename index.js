@@ -5,7 +5,7 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const url = "your-url-here"; 
+const url = "https://github.com/"; 
 const cookiesPath = path.join(__dirname, "cookies.json");
 
 let browser, page;
