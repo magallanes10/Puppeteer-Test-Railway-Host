@@ -56,7 +56,7 @@ app.get("/ss", async (req, res) => {
             return res.status(500).json({ error: "Browser not initialized" });
         }
 
-        const screenshotPath = path.resolve(__dirname, `screenshot-${Date.now()}.jpeg`); // ✅ Unique filename
+        const screenshotPath = path.resolve(__dirname, `screenshot-${Date.now()}.jpeg`);
         await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
 
         res.sendFile(screenshotPath, (err) => {
@@ -73,6 +73,28 @@ app.get("/ss", async (req, res) => {
     } catch (error) {
         console.error("❌ Screenshot error:", error);
         res.status(500).json({ error: "Failed to capture screenshot" });
+    }
+});
+
+// ✅ Reload Route - Reloads the page
+app.get("/reload", async (req, res) => {
+    try {
+        if (!page) {
+            return res.status(500).json({ error: "Browser not initialized" });
+        }
+
+        await page.reload({ waitUntil: "domcontentloaded" });
+
+        // ✅ Ensure page is fully reloaded
+        await page.waitForSelector("body", { timeout: 60000 });
+        await page.waitForFunction(() => document.readyState === "complete");
+
+        console.log("🔄 The page is reloaded.");
+        res.json({ message: "The page is reloaded" });
+
+    } catch (error) {
+        console.error("❌ Reload error:", error);
+        res.status(500).json({ error: "Failed to reload the page" });
     }
 });
 
