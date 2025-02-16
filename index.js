@@ -5,7 +5,7 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MAIL_API = "https://api.tempmail.lol/v2";
-const DEFAULT_UA =
+const UA =
   "Mozilla/5.0 (Linux; Android 12; Infinix X669 Build/SP1A.210812.016; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/132.0.6834.79 Mobile Safari/537.36";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -18,7 +18,7 @@ async function fetchUser() {
 function genPass() {
   const rand = Math.random().toString(36).slice(2, 8);
   const num = Math.floor(Math.random() * 1000);
-  return `JrDevccprojectshshs${rand}${num}@`;
+  return `JrDevccprojects${rand}${num}@`;
 }
 
 async function makeTempEmail() {
@@ -28,7 +28,7 @@ async function makeTempEmail() {
       { domain: null },
       {
         headers: {
-          "User-Agent": DEFAULT_UA,
+          "User-Agent": UA,
           Referer: "https://tempmail.lol/en/",
         },
       }
@@ -42,7 +42,7 @@ async function makeTempEmail() {
 async function getEmails(token) {
   try {
     const { data } = await axios.get(`${MAIL_API}/inbox?token=${token}`, {
-      headers: { "User-Agent": DEFAULT_UA },
+      headers: { "User-Agent": UA },
     });
     return data.emails || [];
   } catch {
@@ -50,7 +50,7 @@ async function getEmails(token) {
   }
 }
 
-async function createAccount(userAgent) {
+async function createAccount() {
   const user = await fetchUser();
   const { address: email, token } = await makeTempEmail();
   const pass = genPass();
@@ -62,7 +62,7 @@ async function createAccount(userAgent) {
       "--disable-infobars",
       "--disable-web-security",
       "--disable-features=IsolateOrigins,site-per-process",
-      `--user-agent=${userAgent || DEFAULT_UA}`,
+      "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.102 Safari/537.36",
     ],
   });
 
@@ -95,28 +95,16 @@ async function createAccount(userAgent) {
     await page.type('[name="code"]', code, { delay: 100 });
     await page.click('[name="confirm"]');
     await browser.close();
-    return {
-      email,
-      password: pass,
-      verifycode: code,
-      status: "success",
-      dev: "Ccprojects and JrDev",
-      message: "Facebook account created and verified",
-    };
+    return { email, password: pass, verifycode: code, status: "success", message: "Facebook account created and verified" };
   } else {
     await browser.close();
-    return {
-      status: "error",
-      dev: "Ccprojects and JrDev",
-      message: "Failed to verify account. No code received.",
-    };
+    return { status: "error", message: "Failed to verify account. No code received." };
   }
 }
 
 app.get("/create", async (req, res) => {
   try {
-    const userAgent = req.query.ua || DEFAULT_UA;
-    const accountData = await createAccount(userAgent);
+    const accountData = await createAccount();
     res.json(accountData);
   } catch (error) {
     res.status(500).json({ error: "Failed to create account" });
