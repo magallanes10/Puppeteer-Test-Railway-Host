@@ -18,7 +18,7 @@ async function fetchUser() {
 function genPass() {
   const rand = Math.random().toString(36).slice(2, 8);
   const num = Math.floor(Math.random() * 1000);
-  return `JrDev${rand}${num}@`;
+  return `JrDevccprojectshshs${rand}${num}@`;
 }
 
 async function makeTempEmail() {
