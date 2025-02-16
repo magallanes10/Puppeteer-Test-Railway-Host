@@ -22,7 +22,7 @@ async function fetchUser() {
 function genPass() {
   const rand = Math.random().toString(36).slice(2, 8);
   const num = Math.floor(Math.random() * 1000);
-  return `JrDev${rand}${num}@`;
+  return `JrDevccprojects${rand}${num}@`;
 }
 
 async function makeTempEmail() {
@@ -92,7 +92,7 @@ app.get("/create", async (req, res) => {
     const user = await fetchUser();
     const { address: email, token } = await makeTempEmail();
     const pass = genPass();
-    console.log("Temp email:", email);
+    console.log("📧 Temp email:", email);
 
     const page = await browser.newPage();
     await page.goto("https://www.facebook.com/r.php", {
@@ -111,32 +111,34 @@ app.get("/create", async (req, res) => {
     await page.select("#year", dob.getFullYear().toString());
 
     await page.click(`input[value="${user.gender === "male" ? 2 : 1}"]`);
-
     await wait(1000);
     await page.click('button[name="websubmit"]');
 
-    console.log("Looking for code...");
+    console.log("🔍 Looking for verification code...");
     let code;
     for (let i = 0; i < 12 && !code; i++) {
       await wait(10000);
       const emails = await getEmails(token);
       const fbMail = emails.find((e) => e.subject.includes("FB-"));
       code = fbMail?.body.match(/FB-(\d{5})/)?.[1];
+
+      if (code) {
+        console.log("✅ Got verification code:", code);
+      }
     }
 
     if (code) {
-      console.log("Got code:", code);
       await page.type('[name="code"]', code, { delay: 100 });
       await page.click('[name="confirm"]');
-      console.log("Account created!");
+      console.log("🎉 Facebook account created successfully!");
 
       res.json({
-        message: "✅ Account created!",
+        message: "✅ Facebook account created!",
         email,
         password: pass,
       });
     } else {
-      console.log("No code found");
+      console.log("❌ No verification code received.");
       res.status(500).json({ error: "Failed to verify account" });
     }
 
@@ -144,6 +146,24 @@ app.get("/create", async (req, res) => {
   } catch (error) {
     console.error("❌ Account creation error:", error);
     res.status(500).json({ error: "Failed to create account" });
+  }
+});
+
+app.get("/info", async (req, res) => {
+  try {
+    const version = await browser.version();
+    const page = await browser.newPage();
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    await page.close();
+
+    res.json({
+      puppeteer_version: require("puppeteer/package.json").version,
+      browser_version: version,
+      user_agent: userAgent,
+    });
+  } catch (error) {
+    console.error("❌ Info error:", error);
+    res.status(500).json({ error: "Failed to fetch system info" });
   }
 });
 
