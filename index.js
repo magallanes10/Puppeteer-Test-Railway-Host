@@ -10,12 +10,14 @@ const cookiesPath = path.join(__dirname, "cookies.json");
 
 let browser, page;
 
-// ✅ Function to Start Puppeteer & Handle Errors
+async function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function initBrowser() {
     try {
-        if (browser) await browser.close(); // Close if already running
+        if (browser) await browser.close();
 
-        console.log("🔄 Starting Puppeteer...");
         browser = await puppeteer.launch({
             headless: "new",
             protocolTimeout: 60000,
@@ -30,8 +32,6 @@ async function initBrowser() {
         });
 
         page = await browser.newPage();
-
-        // ✅ Set Mobile View (Android)
         await page.emulate({
             viewport: { width: 412, height: 915, isMobile: true },
             userAgent:
@@ -43,104 +43,59 @@ async function initBrowser() {
             await page.setCookie(...cookies);
         }
 
-        // ✅ Try multiple times if page fails
         let retries = 3;
         while (retries > 0) {
             try {
                 await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-
-                // ✅ Ensure full page load
                 await page.waitForSelector("body", { timeout: 60000 });
                 await page.waitForFunction(() => document.readyState === "complete");
-                await page.waitForTimeout(2000);
-                
-                console.log("✅ Puppeteer is running in mobile view and page is fully loaded.");
-                return;
+                await wait(2000);
+                fs.writeFileSync(cookiesPath, JSON.stringify(await page.cookies(), null, 2));
+                console.log("✅ Puppeteer is running.");
+                break;
             } catch (error) {
-                console.error(`🔄 Reload attempt ${4 - retries}:`, error);
+                console.error("❌ Error loading page:", error);
                 retries--;
+                if (retries === 0) throw error;
+                await wait(5000);
             }
         }
-
-        throw new Error("❌ Failed to load page after multiple attempts");
-
     } catch (error) {
         console.error("❌ Failed to start Puppeteer:", error);
-        setTimeout(initBrowser, 5000); // Retry after 5 seconds
+        setTimeout(initBrowser, 5000);
     }
 }
 
-// ✅ Middleware to auto-fix crashes
 app.use(async (req, res, next) => {
-    if (!page || page.isClosed()) {
-        console.log("⏳ Re-initializing Puppeteer...");
+    if (!page) {
+        console.log("⏳ Initializing Puppeteer...");
         await initBrowser();
     }
     next();
 });
 
-// ✅ Screenshot Route - Auto-reconnects on error
 app.get("/ss", async (req, res) => {
     try {
-        if (!page || page.isClosed()) throw new Error("Browser not initialized");
-
-        console.log("📸 Capturing new screenshot...");
-        const screenshotPath = path.resolve(__dirname, `screenshot-${Date.now()}.jpeg`);
-
-        await page.waitForSelector("body", { timeout: 60000 });
-        await page.waitForFunction(() => document.readyState === "complete");
-        await page.waitForTimeout(2000);
-
-        await page.screenshot({ 
-            path: screenshotPath, 
-            type: "jpeg", 
-            quality: 80, 
-            fullPage: true 
-        });
+        const screenshotPath = path.resolve(__dirname, `screenshot_${Date.now()}.jpeg`);
+        await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
 
         res.sendFile(screenshotPath, (err) => {
             if (err) {
-                console.error("❌ Screenshot send error:", err);
+                console.error("❌ Error sending file:", err);
                 res.status(500).json({ error: "Failed to send screenshot" });
             }
             fs.unlink(screenshotPath, (unlinkErr) => {
                 if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
             });
         });
-
     } catch (error) {
         console.error("❌ Screenshot error:", error);
-        await initBrowser(); // Restart Puppeteer if error occurs
-        res.status(500).json({ error: "Puppeteer restarted due to an error" });
+        res.status(500).json({ error: "Failed to capture screenshot" });
     }
 });
 
-// ✅ Reload Route - Auto-reconnects on error
-app.get("/reload", async (req, res) => {
-    try {
-        if (!page || page.isClosed()) throw new Error("Browser not initialized");
-
-        console.log("🔄 Reloading page...");
-        await page.reload({ waitUntil: "domcontentloaded" });
-
-        await page.waitForSelector("body", { timeout: 60000 });
-        await page.waitForFunction(() => document.readyState === "complete");
-
-        console.log("✅ Page reloaded.");
-        res.json({ message: "The page is reloaded" });
-
-    } catch (error) {
-        console.error("❌ Reload error:", error);
-        await initBrowser(); // Restart Puppeteer if error occurs
-        res.status(500).json({ error: "Puppeteer restarted due to an error" });
-    }
-});
-
-// ✅ Info Route - Auto-reconnects on error
 app.get("/info", async (req, res) => {
     try {
-        if (!page || page.isClosed()) throw new Error("Browser not initialized");
-
         const version = await browser.version();
         const userAgent = await page.evaluate(() => navigator.userAgent);
 
@@ -149,15 +104,22 @@ app.get("/info", async (req, res) => {
             browser_version: version,
             user_agent: userAgent,
         });
-
     } catch (error) {
         console.error("❌ Info error:", error);
-        await initBrowser(); // Restart Puppeteer if error occurs
-        res.status(500).json({ error: "Puppeteer restarted due to an error" });
+        res.status(500).json({ error: "Failed to fetch system info" });
     }
 });
 
-// Start server & initialize Puppeteer
+app.get("/reload", async (req, res) => {
+    try {
+        await initBrowser();
+        res.json({ message: "The page is reloaded" });
+    } catch (error) {
+        console.error("❌ Reload error:", error);
+        res.status(500).json({ error: "Failed to reload page" });
+    }
+});
+
 app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     await initBrowser();
