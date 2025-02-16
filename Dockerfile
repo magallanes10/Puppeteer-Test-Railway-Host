@@ -1,6 +1,14 @@
 FROM node:18-bullseye
 
-# Install required dependencies
+WORKDIR /app
+
+COPY package.json ./
+
+RUN npm install --omit=dev --package-lock-only
+RUN npm install --omit=dev
+
+COPY . .
+
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
@@ -26,11 +34,6 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm install --omit=dev
-
-COPY . .
 EXPOSE 3000
 
 CMD ["node", "index.js"]
