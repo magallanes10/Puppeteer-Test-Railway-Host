@@ -5,19 +5,18 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const url = "your-url-here"; 
-const cookiesPath = path.join(__dirname, "cookies.json");
+const url = "https://github.com"; 
+const cookiesPath = "cookies.json";
 
 let browser, page;
 
+// Function to start Puppeteer and keep it running
 async function initBrowser() {
+    if (browser) return; // Prevent multiple instances
+
     browser = await puppeteer.launch({
-        headless: "new", // ✅ Ensures fully headless mode
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-gpu", // ✅ Prevents GPU-related errors
-        ],
+        headless: "new",
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
     });
 
     page = await browser.newPage();
@@ -29,46 +28,59 @@ async function initBrowser() {
 
     await page.goto(url, { waitUntil: "networkidle2" });
 
-    const cookies = await page.cookies();
-    fs.writeFileSync(cookiesPath, JSON.stringify(cookies, null, 2));
+    fs.writeFileSync(cookiesPath, JSON.stringify(await page.cookies(), null, 2));
 
-    console.log("✅ Browser initialized and page loaded.");
+    console.log("✅ Puppeteer is running and page is loaded.");
 }
 
-app.get("/ss", async (req, res) => {
+// Ensure Puppeteer is initialized before handling requests
+app.use(async (req, res, next) => {
     if (!page) {
-        return res.status(500).json({ error: "❌ Browser is not initialized yet." });
+        console.log("⏳ Initializing Puppeteer...");
+        await initBrowser();
     }
+    next();
+});
 
-    const screenshotPath = "temp.jpeg";
-    await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
+// Screenshot route
+app.get("/ss", async (req, res) => {
+    try {
+        const screenshotPath = "temp.jpeg";
+        await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
 
-    res.sendFile(screenshotPath, (err) => {
-        if (err) {
-            console.error("❌ Error sending file:", err);
-            res.status(500).json({ error: "Failed to send screenshot" });
-        }
-        fs.unlink(screenshotPath, (unlinkErr) => {
-            if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
+        res.sendFile(screenshotPath, (err) => {
+            if (err) {
+                console.error("❌ Error sending file:", err);
+                res.status(500).json({ error: "Failed to send screenshot" });
+            }
+            fs.unlink(screenshotPath, (unlinkErr) => {
+                if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
+            });
         });
-    });
-});
-
-app.get("/info", async (req, res) => {
-    if (!browser) {
-        return res.status(500).json({ error: "❌ Browser is not initialized yet." });
+    } catch (error) {
+        console.error("❌ Screenshot error:", error);
+        res.status(500).json({ error: "Failed to capture screenshot" });
     }
-
-    const version = await browser.version();
-    const userAgent = await page.evaluate(() => navigator.userAgent);
-
-    res.json({
-        puppeteer_version: require("puppeteer/package.json").version,
-        browser_version: version,
-        user_agent: userAgent,
-    });
 });
 
+// Info route
+app.get("/info", async (req, res) => {
+    try {
+        const version = await browser.version();
+        const userAgent = await page.evaluate(() => navigator.userAgent);
+
+        res.json({
+            puppeteer_version: require("puppeteer/package.json").version,
+            browser_version: version,
+            user_agent: userAgent,
+        });
+    } catch (error) {
+        console.error("❌ Info error:", error);
+        res.status(500).json({ error: "Failed to fetch system info" });
+    }
+});
+
+// Start server & initialize Puppeteer
 app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     await initBrowser();
