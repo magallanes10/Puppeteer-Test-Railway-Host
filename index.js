@@ -5,7 +5,7 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const url = "https://github.com/"; 
+const url = "https://github.com"; 
 const cookiesPath = path.join(__dirname, "cookies.json");
 
 let browser, page;
@@ -47,6 +47,21 @@ app.get("/ss", async (req, res) => {
         fs.unlink(screenshotPath, (unlinkErr) => {
             if (unlinkErr) console.error("Error deleting temp file:", unlinkErr);
         });
+    });
+});
+
+app.get("/info", async (req, res) => {
+    if (!browser) {
+        return res.status(500).json({ error: "Browser is not initialized yet." });
+    }
+
+    const version = await browser.version();
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+
+    res.json({
+        puppeteer_version: require("puppeteer/package.json").version,
+        browser_version: version,
+        user_agent: userAgent,
     });
 });
 
