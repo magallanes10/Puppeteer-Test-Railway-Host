@@ -14,7 +14,8 @@ async function initBrowser() {
     if (browser) return;
 
     browser = await puppeteer.launch({
-        headless: "new",
+        headless: "new", // ✅ Keeps RAM low
+        protocolTimeout: 60000, 
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
     });
 
@@ -25,39 +26,40 @@ async function initBrowser() {
         await page.setCookie(...cookies);
     }
 
-    await page.goto(url, { waitUntil: "networkidle2" });
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+
+    // ✅ Waits for full page load
+    await page.waitForSelector("body", { timeout: 60000 });
+    await page.waitForFunction(() => document.readyState === "complete");
+    await page.waitForTimeout(3000);
 
     fs.writeFileSync(cookiesPath, JSON.stringify(await page.cookies(), null, 2));
 
-    console.log("✅ Puppeteer is running and page is loaded.");
+    console.log("✅ Puppeteer is running and page is fully loaded.");
+
+    // ✅ Automatically take a screenshot and respond
+    autoScreenshot();
 }
 
-app.use(async (req, res, next) => {
-    if (!page) {
-        console.log("⏳ Initializing Puppeteer...");
-        await initBrowser();
-    }
-    next();
-});
-
-// Screenshot route
-app.get("/ss", async (req, res) => {
+async function autoScreenshot() {
     try {
-        const screenshotPath = path.resolve(__dirname, "temp.jpeg"); // ✅ Absolute path fix
+        const screenshotPath = path.resolve(__dirname, "temp.jpeg");
         await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
 
-        res.sendFile(screenshotPath, (err) => {
-            if (err) {
-                console.error("❌ Error sending file:", err);
-                res.status(500).json({ error: "Failed to send screenshot" });
-            }
-            fs.unlink(screenshotPath, (unlinkErr) => {
-                if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
-            });
-        });
+        console.log("📸 Screenshot taken and ready to send.");
     } catch (error) {
         console.error("❌ Screenshot error:", error);
-        res.status(500).json({ error: "Failed to capture screenshot" });
+    }
+}
+
+// Screenshot route (just sends the saved screenshot)
+app.get("/ss", async (req, res) => {
+    try {
+        const screenshotPath = path.resolve(__dirname, "temp.jpeg");
+        res.sendFile(screenshotPath);
+    } catch (error) {
+        console.error("❌ Screenshot error:", error);
+        res.status(500).json({ error: "Failed to send screenshot" });
     }
 });
 
@@ -65,7 +67,10 @@ app.get("/ss", async (req, res) => {
 app.get("/info", async (req, res) => {
     try {
         const version = await browser.version();
-        const userAgent = await page.evaluate(() => navigator.userAgent);
+
+        const userAgentHandle = await page.evaluateHandle(() => navigator.userAgent);
+        const userAgent = await userAgentHandle.jsonValue();
+        await userAgentHandle.dispose();
 
         res.json({
             puppeteer_version: require("puppeteer/package.json").version,
