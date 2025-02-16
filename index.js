@@ -1,6 +1,8 @@
 const express = require("express");
 const puppeteer = require("puppeteer");
 const os = require("os");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,18 +16,27 @@ app.get("/screenshot", async (req, res) => {
 
     try {
         const browser = await puppeteer.launch({
+            headless: "new",
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
 
         const page = await browser.newPage();
         await page.goto(url, { waitUntil: "networkidle2" });
 
-        const screenshot = await page.screenshot({ fullPage: true });
+        const screenshotPath = path.join(__dirname, "temp.jpeg");
+        await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
 
         await browser.close();
 
-        res.setHeader("Content-Type", "image/png");
-        res.send(screenshot);
+        res.sendFile(screenshotPath, (err) => {
+            if (err) {
+                console.error("Error sending file:", err);
+                res.status(500).json({ error: "Failed to send screenshot" });
+            }
+            fs.unlink(screenshotPath, (unlinkErr) => {
+                if (unlinkErr) console.error("Error deleting temp file:", unlinkErr);
+            });
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Failed to capture screenshot" });
@@ -35,12 +46,14 @@ app.get("/screenshot", async (req, res) => {
 app.get("/info", async (req, res) => {
     try {
         const browser = await puppeteer.launch({
+            headless: "new",
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
 
         const version = await browser.version();
         const page = await browser.newPage();
-        const userAgent = await page.userAgent();
+
+        const userAgent = await page.evaluate(() => navigator.userAgent);
 
         await browser.close();
 
