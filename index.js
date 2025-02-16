@@ -6,13 +6,12 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const url = "https://github.com"; 
-const cookiesPath = "cookies.json";
+const cookiesPath = path.join(__dirname, "cookies.json");
 
 let browser, page;
 
-// Function to start Puppeteer and keep it running
 async function initBrowser() {
-    if (browser) return; // Prevent multiple instances
+    if (browser) return;
 
     browser = await puppeteer.launch({
         headless: "new",
@@ -33,7 +32,6 @@ async function initBrowser() {
     console.log("✅ Puppeteer is running and page is loaded.");
 }
 
-// Ensure Puppeteer is initialized before handling requests
 app.use(async (req, res, next) => {
     if (!page) {
         console.log("⏳ Initializing Puppeteer...");
@@ -45,7 +43,7 @@ app.use(async (req, res, next) => {
 // Screenshot route
 app.get("/ss", async (req, res) => {
     try {
-        const screenshotPath = "temp.jpeg";
+        const screenshotPath = path.resolve(__dirname, "temp.jpeg"); // ✅ Absolute path fix
         await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
 
         res.sendFile(screenshotPath, (err) => {
