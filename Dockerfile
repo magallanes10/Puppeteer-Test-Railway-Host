@@ -1,5 +1,7 @@
-FROM node:18  # Or your preferred Node.js version
+# Use a valid Node.js base image
+FROM node:18  
 
+# Update and install required dependencies
 RUN apt-get update && apt-get install -y \
     libgbm1 \
     libasound2 \
@@ -18,8 +20,15 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Set working directory inside the container
+WORKDIR /app  
+
+# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
-COPY . .
+RUN npm install  
+
+# Copy all project files
+COPY . .  
+
+# Set the command to run the bot
 CMD ["node", "index.js"]
