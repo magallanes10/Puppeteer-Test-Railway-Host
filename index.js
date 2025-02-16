@@ -46,35 +46,33 @@ async function initBrowser() {
     await page.waitForSelector("body", { timeout: 60000 });
     await page.waitForFunction(() => document.readyState === "complete");
 
-    // ✅ Fix: Use setTimeout instead of waitForTimeout
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    fs.writeFileSync(cookiesPath, JSON.stringify(await page.cookies(), null, 2));
-
     console.log("✅ Puppeteer is running in mobile view and page is fully loaded.");
-    
-    autoScreenshot();
 }
 
-async function autoScreenshot() {
-    try {
-        const screenshotPath = path.resolve(__dirname, "temp.jpeg");
-        await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
-
-        console.log("📸 Mobile screenshot taken and ready to send.");
-    } catch (error) {
-        console.error("❌ Screenshot error:", error);
-    }
-}
-
-// Screenshot route
+// ✅ Screenshot Route - Takes a new screenshot every time
 app.get("/ss", async (req, res) => {
     try {
-        const screenshotPath = path.resolve(__dirname, "temp.jpeg");
-        res.sendFile(screenshotPath);
+        if (!page) {
+            return res.status(500).json({ error: "Browser not initialized" });
+        }
+
+        const screenshotPath = path.resolve(__dirname, `screenshot-${Date.now()}.jpeg`); // ✅ Unique filename
+        await page.screenshot({ path: screenshotPath, type: "jpeg", quality: 80, fullPage: true });
+
+        res.sendFile(screenshotPath, (err) => {
+            if (err) {
+                console.error("❌ Screenshot error:", err);
+                res.status(500).json({ error: "Failed to send screenshot" });
+            }
+            // ✅ Delete old screenshot after sending
+            fs.unlink(screenshotPath, (unlinkErr) => {
+                if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
+            });
+        });
+
     } catch (error) {
         console.error("❌ Screenshot error:", error);
-        res.status(500).json({ error: "Failed to send screenshot" });
+        res.status(500).json({ error: "Failed to capture screenshot" });
     }
 });
 
