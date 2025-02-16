@@ -1,7 +1,5 @@
 const express = require("express");
 const puppeteer = require("puppeteer");
-const { exec } = require("node:child_process");
-const { promisify } = require("node:util");
 const axios = require("axios");
 
 const app = express();
@@ -60,7 +58,6 @@ async function initBrowser() {
   try {
     if (browser) await browser.close();
 
-    const { stdout: chromePath } = await promisify(exec)("which chromium");
     browser = await puppeteer.launch({
       headless: "new",
       args: [
@@ -73,7 +70,6 @@ async function initBrowser() {
         "--disable-dev-shm-usage",
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.102 Safari/537.36",
       ],
-      executablePath: chromePath.trim(),
     });
 
     console.log("✅ Puppeteer initialized.");
