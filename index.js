@@ -10,11 +10,12 @@ const cookiesPath = path.join(__dirname, "cookies.json");
 
 let browser, page;
 
+// ✅ Function to Start Puppeteer & Handle Errors
 async function initBrowser() {
     try {
-        if (browser) await browser.close(); // Close existing browser if any
+        if (browser) await browser.close(); // Close if already running
 
-        console.log("🔄 Restarting Puppeteer...");
+        console.log("🔄 Starting Puppeteer...");
         browser = await puppeteer.launch({
             headless: "new",
             protocolTimeout: 60000,
@@ -42,14 +43,27 @@ async function initBrowser() {
             await page.setCookie(...cookies);
         }
 
-        await page.goto(url, { waitUntil: "domcontentloaded" });
+        // ✅ Try multiple times if page fails
+        let retries = 3;
+        while (retries > 0) {
+            try {
+                await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-        // ✅ Ensure full load
-        await page.waitForSelector("body", { timeout: 60000 });
-        await page.waitForFunction(() => document.readyState === "complete");
-        await page.waitForTimeout(2000); // Extra stability
+                // ✅ Ensure full page load
+                await page.waitForSelector("body", { timeout: 60000 });
+                await page.waitForFunction(() => document.readyState === "complete");
+                await page.waitForTimeout(2000);
+                
+                console.log("✅ Puppeteer is running in mobile view and page is fully loaded.");
+                return;
+            } catch (error) {
+                console.error(`🔄 Reload attempt ${4 - retries}:`, error);
+                retries--;
+            }
+        }
 
-        console.log("✅ Puppeteer is running in mobile view and page is fully loaded.");
+        throw new Error("❌ Failed to load page after multiple attempts");
+
     } catch (error) {
         console.error("❌ Failed to start Puppeteer:", error);
         setTimeout(initBrowser, 5000); // Retry after 5 seconds
@@ -58,7 +72,7 @@ async function initBrowser() {
 
 // ✅ Middleware to auto-fix crashes
 app.use(async (req, res, next) => {
-    if (!page) {
+    if (!page || page.isClosed()) {
         console.log("⏳ Re-initializing Puppeteer...");
         await initBrowser();
     }
@@ -68,38 +82,31 @@ app.use(async (req, res, next) => {
 // ✅ Screenshot Route - Auto-reconnects on error
 app.get("/ss", async (req, res) => {
     try {
-        if (!page) throw new Error("Browser not initialized");
+        if (!page || page.isClosed()) throw new Error("Browser not initialized");
 
-        // Ensure page is still connected
-        if (!page.isClosed()) {
-            console.log("📸 Capturing new screenshot...");
-            const screenshotPath = path.resolve(__dirname, `screenshot-${Date.now()}.jpeg`);
+        console.log("📸 Capturing new screenshot...");
+        const screenshotPath = path.resolve(__dirname, `screenshot-${Date.now()}.jpeg`);
 
-            await page.waitForSelector("body", { timeout: 60000 });
-            await page.waitForFunction(() => document.readyState === "complete");
-            await page.waitForTimeout(2000); // Extra wait before screenshot
+        await page.waitForSelector("body", { timeout: 60000 });
+        await page.waitForFunction(() => document.readyState === "complete");
+        await page.waitForTimeout(2000);
 
-            await page.screenshot({ 
-                path: screenshotPath, 
-                type: "jpeg", 
-                quality: 80, 
-                fullPage: true 
+        await page.screenshot({ 
+            path: screenshotPath, 
+            type: "jpeg", 
+            quality: 80, 
+            fullPage: true 
+        });
+
+        res.sendFile(screenshotPath, (err) => {
+            if (err) {
+                console.error("❌ Screenshot send error:", err);
+                res.status(500).json({ error: "Failed to send screenshot" });
+            }
+            fs.unlink(screenshotPath, (unlinkErr) => {
+                if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
             });
-
-            res.sendFile(screenshotPath, (err) => {
-                if (err) {
-                    console.error("❌ Screenshot send error:", err);
-                    res.status(500).json({ error: "Failed to send screenshot" });
-                }
-                // ✅ Delete old screenshot after sending
-                fs.unlink(screenshotPath, (unlinkErr) => {
-                    if (unlinkErr) console.error("❌ Error deleting temp file:", unlinkErr);
-                });
-            });
-
-        } else {
-            throw new Error("Page disconnected");
-        }
+        });
 
     } catch (error) {
         console.error("❌ Screenshot error:", error);
@@ -111,7 +118,7 @@ app.get("/ss", async (req, res) => {
 // ✅ Reload Route - Auto-reconnects on error
 app.get("/reload", async (req, res) => {
     try {
-        if (!page) throw new Error("Browser not initialized");
+        if (!page || page.isClosed()) throw new Error("Browser not initialized");
 
         console.log("🔄 Reloading page...");
         await page.reload({ waitUntil: "domcontentloaded" });
@@ -132,7 +139,7 @@ app.get("/reload", async (req, res) => {
 // ✅ Info Route - Auto-reconnects on error
 app.get("/info", async (req, res) => {
     try {
-        if (!page) throw new Error("Browser not initialized");
+        if (!page || page.isClosed()) throw new Error("Browser not initialized");
 
         const version = await browser.version();
         const userAgent = await page.evaluate(() => navigator.userAgent);
